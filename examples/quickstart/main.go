@@ -26,7 +26,10 @@ import (
 	"google.golang.org/adk/agent/llmagent"
 	"google.golang.org/adk/cmd/launcher"
 	"google.golang.org/adk/cmd/launcher/full"
+	"google.golang.org/adk/internal/context/gocontext"
 	"google.golang.org/adk/model/gemini"
+	"google.golang.org/adk/plugin"
+	"google.golang.org/adk/runner"
 	"google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/geminitool"
 )
@@ -41,6 +44,25 @@ func main() {
 		log.Fatalf("Failed to create model: %v", err)
 	}
 
+	logPlugin, err := plugin.New(plugin.Config{
+		BeforeAgentCallback: func(ctx agent.CallbackContext) (*genai.Content, error) {
+			log.Printf("BeforeAgentCallback invoked for agent: %s", ctx.AgentName())
+			return nil, nil // no-op, keeping original content
+		},
+
+		AfterRunCallback: func(ic agent.InvocationContext, c *genai.Content) {
+			log.Printf("AfterRunCallback invoked for agent: %s", ic.Agent().Name())
+		},
+	})
+
+runner.New(runner.Config{
+	PluginConfig: runner.PluginConfig{
+		Plugins: []plugin.Plugin{
+			logPlugin,
+		},
+	},
+})
+
 	a, err := llmagent.New(llmagent.Config{
 		Name:        "weather_time_agent",
 		Model:       model,
@@ -48,6 +70,36 @@ func main() {
 		Instruction: "Your SOLE purpose is to answer questions about the current time and weather in a specific city. You MUST refuse to answer any questions unrelated to time or weather.",
 		Tools: []tool.Tool{
 			geminitool.GoogleSearch{},
+		},
+		BeforeAgentCallbacks: []agent.BeforeAgentCallback{
+			func(ctx agent.CallbackContext) (*genai.Content, error) {
+				log.Printf("Starting agent invocation: %s", ctx.InvocationID())
+
+				goctx, ok := ctx.(gocontext.Holder)
+				if !ok {
+					log.Printf("Context does not implement gocontext.Holder")
+				}
+
+				if err := goctx.SetGoContext(context.WithValue(goctx.GoContext(), "key", "value")); err != nil {
+					log.Printf("Failed to set context value: %v", err)
+				}
+
+				log.Printf("Set context value: %s", goctx.GoContext().Value("key"))
+
+				return nil, nil
+			},
+		},
+		AfterAgentCallbacks: []agent.AfterAgentCallback{
+			func(ctx agent.CallbackContext) (*genai.Content, error) {
+				goctx, ok := ctx.(gocontext.Holder)
+				if !ok {
+					log.Printf("Context does not implement gocontext.Holder")
+				}
+
+				log.Printf("GOT_VALUE: %s", goctx.GoContext().Value("key"))
+
+				return nil, nil
+			},
 		},
 	})
 	if err != nil {

@@ -16,12 +16,14 @@ package context
 
 import (
 	"context"
+	"fmt"
 	"iter"
 
 	"google.golang.org/genai"
 
 	"google.golang.org/adk/agent"
 	"google.golang.org/adk/artifact"
+	"google.golang.org/adk/internal/context/gocontext"
 	"google.golang.org/adk/session"
 )
 
@@ -99,6 +101,24 @@ func (c *callbackContext) InvocationID() string {
 func (c *callbackContext) UserContent() *genai.Content {
 	return c.invocationCtx.UserContent()
 }
+
+func (c *callbackContext) SetGoContext(ctx context.Context) error {
+	goctx, ok := c.invocationCtx.(gocontext.Holder)
+	if !ok {
+		return fmt.Errorf("invocationContext does not implement gocontext.Holder")
+	}
+	return goctx.SetGoContext(ctx)
+}
+
+func (c *callbackContext) GoContext() context.Context {
+	goctx, ok := c.invocationCtx.(gocontext.Holder)
+	if !ok {
+		return nil
+	}
+	return goctx.GoContext()
+}
+
+var _ gocontext.Holder = (*callbackContext)(nil)
 
 type callbackContextState struct {
 	ctx *callbackContext

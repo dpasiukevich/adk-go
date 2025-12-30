@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"iter"
 	"log"
+	"plugin"
 
 	"google.golang.org/genai"
 
@@ -48,7 +49,21 @@ type Config struct {
 	ArtifactService artifact.Service
 	// optional
 	MemoryService memory.Service
+
+	PluginConfig PluginConfig
 }
+
+type PluginConfig struct {
+	Plugins []plugin.Plugin
+}
+
+type ExecutionOrder int
+
+const (
+	ExecutionOrderUndefined ExecutionOrder = iota
+	ExecutionOrderDirect
+	ExecutionOrderSymmetric
+)
 
 // New creates a new [Runner].
 func New(cfg Config) (*Runner, error) {

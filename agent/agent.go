@@ -23,6 +23,7 @@ import (
 
 	"google.golang.org/adk/artifact"
 	agentinternal "google.golang.org/adk/internal/agent"
+	"google.golang.org/adk/internal/context/gocontext"
 	"google.golang.org/adk/memory"
 	"google.golang.org/adk/model"
 	"google.golang.org/adk/session"
@@ -219,8 +220,13 @@ func getAuthorForEvent(ctx InvocationContext, event *session.Event) string {
 func runBeforeAgentCallbacks(ctx InvocationContext) (*session.Event, error) {
 	agent := ctx.Agent()
 
+	goctx, ok := ctx.(gocontext.Holder)
+	if !ok {
+		return nil, fmt.Errorf("invocationContext does not implement gocontext.Holder")
+	}
+
 	callbackCtx := &callbackContext{
-		Context:           ctx,
+		Context:           goctx.GoContext(),
 		invocationContext: ctx,
 		actions:           &session.EventActions{StateDelta: make(map[string]any)},
 	}
@@ -262,8 +268,13 @@ func runBeforeAgentCallbacks(ctx InvocationContext) (*session.Event, error) {
 func runAfterAgentCallbacks(ctx InvocationContext) (*session.Event, error) {
 	agent := ctx.Agent()
 
+	goctx, ok := ctx.(gocontext.Holder)
+	if !ok {
+		return nil, fmt.Errorf("invocationContext does not implement gocontext.Holder")
+	}
+
 	callbackCtx := &callbackContext{
-		Context:           ctx,
+		Context:           goctx.GoContext(),
 		invocationContext: ctx,
 		actions:           &session.EventActions{StateDelta: make(map[string]any)},
 	}
@@ -352,7 +363,23 @@ func (c *callbackContext) UserID() string {
 	return c.invocationContext.Session().UserID()
 }
 
+func (c *callbackContext) GoContext() context.Context {
+	return c.Context
+}
+
+func (c *callbackContext) SetGoContext(ctx context.Context) error {
+	c.Context = ctx
+
+	goctx, ok := c.invocationContext.(gocontext.Holder)
+	if !ok {
+		return fmt.Errorf("invocationContext does not implement gocontext.Holder")
+	}
+
+	return goctx.SetGoContext(ctx)
+}
+
 var _ CallbackContext = (*callbackContext)(nil)
+var _ gocontext.Holder = (*callbackContext)(nil)
 
 type callbackContextState struct {
 	ctx *callbackContext
@@ -432,3 +459,14 @@ func (c *invocationContext) EndInvocation() {
 func (c *invocationContext) Ended() bool {
 	return c.endInvocation
 }
+
+func (c *invocationContext) SetGoContext(ctx context.Context) error {
+	c.Context = ctx
+	return nil
+}
+
+func (c *invocationContext) GoContext() context.Context {
+	return c.Context
+}
+
+var _ gocontext.Holder = (*invocationContext)(nil)
