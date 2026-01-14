@@ -300,7 +300,3 @@ func (pm *PluginManager) Close() error {
 	}
 	return nil
 }
-
-var _ agent.PluginManager = (*PluginManager)(nil)
-
-var _ tool.PluginManager = (*PluginManager)(nil)

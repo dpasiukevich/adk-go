@@ -28,6 +28,7 @@ import (
 	"google.golang.org/adk/internal/agent/parentmap"
 	"google.golang.org/adk/internal/agent/runconfig"
 	icontext "google.golang.org/adk/internal/context"
+	"google.golang.org/adk/internal/plugininternal/plugincontext"
 	"google.golang.org/adk/internal/telemetry"
 	"google.golang.org/adk/internal/toolinternal"
 	"google.golang.org/adk/internal/utils"
@@ -268,7 +269,7 @@ func toolPreprocess(ctx agent.InvocationContext, req *model.LLMRequest, tools []
 
 func (f *Flow) callLLM(ctx agent.InvocationContext, req *model.LLMRequest, stateDelta map[string]any) iter.Seq2[*model.LLMResponse, error] {
 	return func(yield func(*model.LLMResponse, error) bool) {
-		pluginManager := ctx.PluginManager()
+		pluginManager := ctx.Value(plugincontext.Key).(pluginManager)
 		if pluginManager != nil {
 			cctx := icontext.NewCallbackContextWithDelta(ctx, stateDelta)
 			callbackResponse, callbackErr := pluginManager.RunBeforeModelCallback(cctx, req)
@@ -336,7 +337,7 @@ func (f *Flow) callLLM(ctx agent.InvocationContext, req *model.LLMRequest, state
 }
 
 func (f *Flow) runAfterModelCallbacks(ctx agent.InvocationContext, llmResp *model.LLMResponse, stateDelta map[string]any, llmErr error) (*model.LLMResponse, error) {
-	pluginManager := ctx.PluginManager()
+	pluginManager := ctx.Value(plugincontext.Key).(pluginManager)
 	if pluginManager != nil {
 		cctx := icontext.NewCallbackContextWithDelta(ctx, stateDelta)
 		callbackResponse, callbackErr := pluginManager.RunAfterModelCallback(cctx, llmResp, llmErr)
@@ -358,7 +359,7 @@ func (f *Flow) runAfterModelCallbacks(ctx agent.InvocationContext, llmResp *mode
 }
 
 func (f *Flow) runOnModelErrorCallbacks(ctx agent.InvocationContext, llmReq *model.LLMRequest, stateDelta map[string]any, llmErr error) (*model.LLMResponse, error) {
-	pluginManager := ctx.PluginManager()
+	pluginManager := ctx.Value(plugincontext.Key).(pluginManager)
 	if pluginManager != nil {
 		cctx := icontext.NewCallbackContextWithDelta(ctx, stateDelta)
 		callbackResponse, callbackErr := pluginManager.RunOnModelErrorCallback(cctx, llmReq, llmErr)
@@ -534,7 +535,8 @@ func (f *Flow) handleFunctionCalls(ctx agent.InvocationContext, toolsDict map[st
 }
 
 func (f *Flow) runOnToolErrorCallbacks(toolCtx tool.Context, tool tool.Tool, fArgs map[string]any, err error) (map[string]any, error) {
-	pluginManager := toolCtx.PluginManager()
+	pluginManager := toolCtx.Value(plugincontext.Key).(pluginManager)
+
 	if pluginManager != nil {
 		result, err := pluginManager.RunOnToolErrorCallback(toolCtx, tool, fArgs, err)
 		if result == nil && err == nil {
@@ -547,7 +549,7 @@ func (f *Flow) runOnToolErrorCallbacks(toolCtx tool.Context, tool tool.Tool, fAr
 func (f *Flow) callTool(toolCtx tool.Context, tool toolinternal.FunctionTool, fArgs map[string]any) map[string]any {
 	var response map[string]any
 	var err error
-	pluginManager := toolCtx.PluginManager()
+	pluginManager := toolCtx.Value(plugincontext.Key).(pluginManager)
 	if pluginManager != nil {
 		response, err = pluginManager.RunBeforeToolCallback(toolCtx, tool, fArgs)
 	}
@@ -703,4 +705,13 @@ func deepMergeMap(dst, src map[string]any) map[string]any {
 		dst[key] = value
 	}
 	return dst
+}
+
+type pluginManager interface {
+	RunBeforeModelCallback(cctx agent.CallbackContext, llmRequest *model.LLMRequest) (*model.LLMResponse, error)
+	RunAfterModelCallback(cctx agent.CallbackContext, llmResponse *model.LLMResponse, llmResponseError error) (*model.LLMResponse, error)
+	RunOnModelErrorCallback(ctx agent.CallbackContext, llmRequest *model.LLMRequest, llmResponseError error) (*model.LLMResponse, error)
+	RunBeforeToolCallback(ctx tool.Context, t tool.Tool, args map[string]any) (map[string]any, error)
+	RunAfterToolCallback(ctx tool.Context, t tool.Tool, args, result map[string]any, err error) (map[string]any, error)
+	RunOnToolErrorCallback(ctx tool.Context, t tool.Tool, args map[string]any, err error) (map[string]any, error)
 }

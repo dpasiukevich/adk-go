@@ -33,6 +33,7 @@ import (
 	"google.golang.org/adk/internal/llminternal"
 	imemory "google.golang.org/adk/internal/memory"
 	"google.golang.org/adk/internal/plugininternal"
+	"google.golang.org/adk/internal/plugininternal/plugincontext"
 	"google.golang.org/adk/internal/sessioninternal"
 	"google.golang.org/adk/memory"
 	"google.golang.org/adk/model"
@@ -140,6 +141,7 @@ func (r *Runner) Run(ctx context.Context, userID, sessionID string, msg *genai.C
 		ctx = runconfig.ToContext(ctx, &runconfig.RunConfig{
 			StreamingMode: runconfig.StreamingMode(cfg.StreamingMode),
 		})
+		ctx = context.WithValue(ctx, plugincontext.Key, r.pluginManager)
 
 		var artifacts agent.Artifacts
 		if r.artifactService != nil {
@@ -162,13 +164,12 @@ func (r *Runner) Run(ctx context.Context, userID, sessionID string, msg *genai.C
 		}
 
 		ctx := icontext.NewInvocationContext(ctx, icontext.InvocationContextParams{
-			Artifacts:     artifacts,
-			Memory:        memoryImpl,
-			Session:       sessioninternal.NewMutableSession(r.sessionService, storedSession),
-			Agent:         agentToRun,
-			UserContent:   msg,
-			RunConfig:     &cfg,
-			PluginManager: r.pluginManager,
+			Artifacts:   artifacts,
+			Memory:      memoryImpl,
+			Session:     sessioninternal.NewMutableSession(r.sessionService, storedSession),
+			Agent:       agentToRun,
+			UserContent: msg,
+			RunConfig:   &cfg,
 		})
 		ctx, err = r.appendMessageToSession(ctx, storedSession, msg, cfg.SaveInputBlobsAsArtifacts)
 		if err != nil {
@@ -176,13 +177,12 @@ func (r *Runner) Run(ctx context.Context, userID, sessionID string, msg *genai.C
 			return
 		}
 
-		pluginManager := ctx.PluginManager()
-		if pluginManager != nil {
+		if r.pluginManager != nil {
 			// Defer the after run callbacks to perform global cleanup tasks or finalizing logs and metrics data.
 			// This does NOT emit any event.
-			defer pluginManager.RunAfterRunCallback(ctx)
+			defer r.pluginManager.RunAfterRunCallback(ctx)
 
-			earlyExitResult, err := pluginManager.RunBeforeRunCallback(ctx)
+			earlyExitResult, err := r.pluginManager.RunBeforeRunCallback(ctx)
 			if earlyExitResult != nil || err != nil {
 				earlyExitEvent := session.NewEvent(ctx.InvocationID())
 				earlyExitEvent.Author = "user"
@@ -206,8 +206,8 @@ func (r *Runner) Run(ctx context.Context, userID, sessionID string, msg *genai.C
 				continue
 			}
 
-			if pluginManager != nil {
-				modifiedEvent, err := pluginManager.RunOnEventCallback(ctx, event)
+			if r.pluginManager != nil {
+				modifiedEvent, err := r.pluginManager.RunOnEventCallback(ctx, event)
 				if err != nil {
 					if !yield(nil, err) {
 						return
@@ -238,9 +238,8 @@ func (r *Runner) appendMessageToSession(ctx agent.InvocationContext, storedSessi
 	if msg == nil {
 		return ctx, nil
 	}
-	pluginManager := ctx.PluginManager()
-	if pluginManager != nil {
-		modifiedMsg, err := pluginManager.RunOnUserMessageCallback(ctx, msg)
+	if r.pluginManager != nil {
+		modifiedMsg, err := r.pluginManager.RunOnUserMessageCallback(ctx, msg)
 		if err != nil {
 			return ctx, fmt.Errorf("error running on run user message callback : %w", err)
 		}
@@ -248,13 +247,12 @@ func (r *Runner) appendMessageToSession(ctx agent.InvocationContext, storedSessi
 			msg = modifiedMsg
 			// update ctx user message
 			ctx = icontext.NewInvocationContext(ctx, icontext.InvocationContextParams{
-				Artifacts:     ctx.Artifacts(),
-				Memory:        ctx.Memory(),
-				Session:       ctx.Session(),
-				Agent:         ctx.Agent(),
-				UserContent:   msg,
-				RunConfig:     ctx.RunConfig(),
-				PluginManager: ctx.PluginManager(),
+				Artifacts:   ctx.Artifacts(),
+				Memory:      ctx.Memory(),
+				Session:     ctx.Session(),
+				Agent:       ctx.Agent(),
+				UserContent: msg,
+				RunConfig:   ctx.RunConfig(),
 			})
 		}
 	}

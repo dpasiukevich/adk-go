@@ -96,8 +96,6 @@ type InvocationContext interface {
 	EndInvocation()
 	// Ended returns whether the invocation has ended.
 	Ended() bool
-
-	PluginManager() PluginManager
 }
 
 // ReadonlyContext provides read-only access to invocation context data.
@@ -125,7 +123,7 @@ type CallbackContext interface {
 	State() session.State
 }
 
-type PluginManager interface {
+type pluginManager interface {
 	RunOnUserMessageCallback(cctx InvocationContext, userMessage *genai.Content) (*genai.Content, error)
 	RunBeforeRunCallback(cctx InvocationContext) (*genai.Content, error)
 	RunAfterRunCallback(cctx InvocationContext)
