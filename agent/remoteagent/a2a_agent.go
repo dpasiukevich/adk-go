@@ -26,7 +26,6 @@ import (
 	"github.com/a2aproject/a2a-go/a2aclient/agentcard"
 
 	"google.golang.org/adk/agent"
-	agentinternal "google.golang.org/adk/internal/agent"
 	icontext "google.golang.org/adk/internal/context"
 	"google.golang.org/adk/server/adka2a"
 	"google.golang.org/adk/session"
@@ -117,7 +116,7 @@ func NewA2A(cfg A2AConfig) (agent.Agent, error) {
 	}
 
 	remoteAgent := &a2aAgent{resolvedCard: cfg.AgentCard}
-	a, err := agent.New(agent.Config{
+	return agent.New(agent.Config{
 		Name:                 cfg.Name,
 		Description:          cfg.Description,
 		BeforeAgentCallbacks: cfg.BeforeAgentCallbacks,
@@ -126,19 +125,6 @@ func NewA2A(cfg A2AConfig) (agent.Agent, error) {
 			return remoteAgent.run(ic, cfg)
 		},
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	internalAgent, ok := a.(agentinternal.Agent)
-	if !ok {
-		return nil, fmt.Errorf("internal error: failed to convert to internal agent")
-	}
-	state := agentinternal.Reveal(internalAgent)
-	state.AgentType = agentinternal.TypeRemoteAgent
-	state.Config = cfg
-
-	return a, nil
 }
 
 type a2aAgent struct {
